@@ -1,0 +1,237 @@
+:root {
+  --bg-top: #1a2332;
+  --bg-mid: #243044;
+  --bg-bot: #2c3e50;
+  --glass-edge: rgba(180, 220, 255, 0.55);
+  --glass-shine: rgba(255, 255, 255, 0.12);
+  --belt: #3d4f63;
+  --belt-rail: #1e2a38;
+  --text: #e8eef5;
+  --muted: #8fa3b8;
+  --accent: #5dade2;
+  --font-display: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: linear-gradient(180deg, var(--bg-top), var(--bg-mid) 45%, var(--bg-bot));
+  color: var(--text);
+  font-family: var(--font-display);
+}
+
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0.75rem 1.25rem;
+}
+
+.top-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.brand {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.hud {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.game-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.glass-zone {
+  display: flex;
+  justify-content: center;
+}
+
+.glass-frame {
+  position: relative;
+  padding: 10px 14px 6px;
+  border-radius: 18px 18px 10px 10px;
+  background: linear-gradient(160deg, var(--glass-shine), transparent 40%),
+    rgba(20, 30, 45, 0.65);
+  border: 2px solid var(--glass-edge);
+  box-shadow: inset 0 0 24px rgba(100, 180, 255, 0.08);
+}
+
+#sand-canvas {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  border-radius: 8px 8px 4px 4px;
+  background: #0d1520;
+  touch-action: none;
+}
+
+.conveyor-zone {
+  background: var(--belt-rail);
+  border-radius: 10px;
+  padding: 0.5rem;
+  border: 1px solid #4a6078;
+}
+
+.conveyor {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+  min-height: 72px;
+  padding: 0.35rem;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--belt) 0 12px,
+    #465a70 12px 14px
+  );
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.conveyor-slot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.conveyor-bottle,
+.inv-bottle {
+  appearance: none;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px 8px 14px 14px;
+  width: 48px;
+  height: 58px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  color: #111;
+  font-weight: 700;
+  font-size: 0.75rem;
+  box-shadow: inset 0 -8px 0 rgba(0, 0, 0, 0.15);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.conveyor-bottle {
+  cursor: default;
+  width: 100%;
+  max-width: 52px;
+  pointer-events: none;
+}
+
+.inv-bottle:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.inv-bottle:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+.inv-bottle .cap,
+.conveyor-bottle .cap {
+  font-size: 0.7rem;
+  line-height: 1;
+  padding-bottom: 6px;
+}
+
+.inventory-zone {
+  flex: 1;
+}
+
+.inventory {
+  display: grid;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.inv-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+}
+
+.inv-cell.empty {
+  border: 1px dashed rgba(143, 163, 184, 0.25);
+  border-radius: 10px;
+}
+
+.inv-row-hint {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 0.15rem;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 14, 22, 0.72);
+  z-index: 20;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.overlay-card {
+  background: #243044;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 1.5rem 1.75rem;
+  text-align: center;
+  max-width: 280px;
+}
+
+.overlay-card h2 {
+  margin: 0 0 0.5rem;
+}
+
+.overlay-card p {
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+.overlay-card button {
+  appearance: none;
+  border: none;
+  background: var(--accent);
+  color: #0d1520;
+  font-weight: 700;
+  padding: 0.55rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+}

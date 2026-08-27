@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>流沙同色消除</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="top-bar">
+        <h1 class="brand">流沙同色消除</h1>
+        <div id="hud" class="hud"></div>
+      </header>
+
+      <main class="game-layout">
+        <section class="glass-zone" aria-label="玻璃瓶">
+          <div class="glass-frame">
+            <canvas id="sand-canvas" width="360" height="420"></canvas>
+          </div>
+        </section>
+
+        <section class="conveyor-zone" aria-label="传送带">
+          <div id="conveyor" class="conveyor"></div>
+        </section>
+
+        <section class="inventory-zone" aria-label="瓶子库存">
+          <div id="inventory" class="inventory"></div>
+        </section>
+      </main>
+
+      <div id="overlay" class="overlay hidden" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

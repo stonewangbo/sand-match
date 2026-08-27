@@ -1,0 +1,19 @@
+# Dependencies
+node_modules
+
+# Build
+dist
+dist-ssr
+*.local
+debug-screenshot*.png
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
