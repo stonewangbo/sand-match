@@ -37,7 +37,7 @@ export class Conveyor {
     return true;
   }
 
-  /** dt 秒，位置 0..1 循环；吸区在约 0.35..0.65 */
+  /** dt 秒，位置 0..1 循环（左→右，绕回左侧） */
   update(dt: number): void {
     for (const b of this.items) {
       b.position += CONVEYOR_SPEED * dt;
@@ -45,12 +45,7 @@ export class Conveyor {
     }
   }
 
-  /** 是否处于吸取窗口 */
-  isInAbsorbWindow(bottle: ConveyorBottle): boolean {
-    return bottle.position >= 0.35 && bottle.position <= 0.65;
-  }
-
-  /** 将归一化位置映射到沙世界列坐标 */
+  /** 将归一化位置映射到沙世界列坐标（经过哪列吸哪列） */
   worldX(bottle: ConveyorBottle, sandWidth: number): number {
     return bottle.position * (sandWidth - 1);
   }

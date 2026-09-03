@@ -1,4 +1,4 @@
-import { CELL_SIZE, COLOR_PALETTE, PHYSICS_SUBSTEPS } from '../config/constants';
+import { CELL_SIZE, COLOR_PALETTE } from '../config/constants';
 import type { SandWorld } from './SandWorld';
 
 const SIM_VS = `#version 300 es
@@ -9,51 +9,8 @@ void main() {
   gl_Position = vec4(a_pos, 0.0, 1.0);
 }`;
 
-/** 竖直下落：空格承接上方沙粒；底部/侧壁越界视为固体墙 */
-const FALL_FS = `#version 300 es
-precision highp float;
-precision highp sampler2D;
-
-uniform sampler2D u_tex;
-uniform vec2 u_texel;
-in vec2 v_uv;
-out vec4 outColor;
-
-bool inBounds(vec2 uv) {
-  return uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
-}
-
-float idAt(vec2 uv) {
-  if (!inBounds(uv)) return 0.0;
-  return texture(u_tex, uv).r;
-}
-
-void main() {
-  // v_uv: x→右, y→上；格子 y 向下增大，故下方 = v_uv - texel.y
-  vec2 aboveUv = v_uv + vec2(0.0, u_texel.y);
-  vec2 belowUv = v_uv - vec2(0.0, u_texel.y);
-
-  float me = idAt(v_uv);
-  float above = idAt(aboveUv);
-  float below = idAt(belowUv);
-
-  bool meSolid = me > 0.001;
-  bool meEmpty = !meSolid;
-  // 越界下方当作墙，不能掉出世界
-  bool belowEmpty = inBounds(belowUv) && below <= 0.001;
-  bool aboveSolid = inBounds(aboveUv) && above > 0.001;
-
-  if (meSolid && belowEmpty) {
-    outColor = vec4(0.0, 0.0, 0.0, 1.0);
-  } else if (meEmpty && aboveSolid) {
-    outColor = vec4(above, 0.0, 0.0, 1.0);
-  } else {
-    outColor = vec4(me, 0.0, 0.0, 1.0);
-  }
-}`;
-
 /**
- * 对角滑落（棋盘格避免双写冲突）
+ * 对角滑落（棋盘格避免双写冲突）——沙漏休止角雪崩主路径
  * u_dir: -1 左下 / +1 右下（相对格子 x）
  * u_parity: 0/1 棋盘
  */
@@ -72,9 +29,13 @@ bool inBounds(vec2 uv) {
   return uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
 }
 
+vec4 cellAt(vec2 uv) {
+  if (!inBounds(uv)) return vec4(0.0);
+  return texture(u_tex, uv);
+}
+
 float idAt(vec2 uv) {
-  if (!inBounds(uv)) return 0.0;
-  return texture(u_tex, uv).r;
+  return cellAt(uv).r;
 }
 
 void main() {
@@ -83,9 +44,12 @@ void main() {
   float fy = floor((1.0 - v_uv.y) * res.y);
   float checker = mod(fx + fy + u_parity, 2.0);
 
-  float me = idAt(v_uv);
+  vec4 me4 = cellAt(v_uv);
+  float me = me4.r;
+  // 保留 G（列下沉量），slide 不改写密实动画标记
+  float sinkG = me4.g;
   if (checker > 0.5) {
-    outColor = vec4(me, 0.0, 0.0, 1.0);
+    outColor = vec4(me, sinkG, 0.0, 1.0);
     return;
   }
 
@@ -96,11 +60,11 @@ void main() {
 
   bool meEmpty = me <= 0.001;
   bool srcSolid = inBounds(srcUv) && src > 0.001;
-  // 源正下越界=墙，视为受阻，可对角滑
   bool srcBlocked = !inBounds(belowSrcUv) || belowSrc > 0.001;
 
   if (meEmpty && srcSolid && srcBlocked) {
-    outColor = vec4(src, 0.0, 0.0, 1.0);
+    float srcSink = cellAt(srcUv).g;
+    outColor = vec4(src, srcSink, 0.0, 1.0);
     return;
   }
 
@@ -113,37 +77,93 @@ void main() {
   bool diagEmpty = inBounds(diagUv) && diag <= 0.001;
 
   if (meSolid && belowFilled && diagEmpty) {
-    // 正下是墙或沙，且对角目标在界内为空 → 滑出
-    // 但正下是墙时 belowFilled=true 且通常不想在底边滑出界——diagEmpty 已要求 inBounds
-    outColor = vec4(0.0, 0.0, 0.0, 1.0);
+    outColor = vec4(0.0, sinkG, 0.0, 1.0);
     return;
   }
 
-  outColor = vec4(me, 0.0, 0.0, 1.0);
+  outColor = vec4(me, sinkG, 0.0, 1.0);
 }`;
 
+/**
+ * 点彩渲染：按当前网格采样，不做整列下沉偏移
+ *（整列 UV 偏移会把未吸取沙采样到空处，吸取结束又跳回，表现为消失/抖动/复现）
+ */
 const BLIT_FS = `#version 300 es
 precision highp float;
 precision highp sampler2D;
 
 uniform sampler2D u_tex;
 uniform sampler2D u_palette;
+uniform vec2 u_texel;
 uniform vec3 u_bg;
 in vec2 v_uv;
 out vec4 outColor;
 
+bool inBounds(vec2 uv) {
+  return uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
+}
+
+vec4 cellAt(vec2 uv) {
+  if (!inBounds(uv)) return vec4(0.0);
+  return texture(u_tex, uv);
+}
+
+float idAt(vec2 uv) {
+  return cellAt(uv).r;
+}
+
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+vec3 shadeId(float id, vec2 sampleUv) {
+  float idx = (id * 255.0 + 0.5) / 256.0;
+  vec3 albedo = texture(u_palette, vec2(idx, 0.5)).rgb;
+
+  vec2 res = 1.0 / u_texel;
+  vec2 cell = floor(sampleUv * res);
+  float h0 = hash21(cell + id * 17.0);
+  float h1 = hash21(cell * 1.37 + id * 9.1);
+  float h2 = hash21(cell.yx * 2.11 + 3.7);
+
+  float grain = (h0 - 0.5) * 0.34;
+  vec3 tint = vec3((h1 - 0.5) * 0.05, (h2 - 0.5) * 0.03, (h0 - 0.5) * -0.02);
+  albedo = clamp(albedo * (1.0 + grain) + tint, 0.0, 1.0);
+
+  float nU = idAt(sampleUv + vec2(0.0, u_texel.y));
+  float nD = idAt(sampleUv - vec2(0.0, u_texel.y));
+  float nL = idAt(sampleUv - vec2(u_texel.x, 0.0));
+  float nR = idAt(sampleUv + vec2(u_texel.x, 0.0));
+  float nUL = idAt(sampleUv + vec2(-u_texel.x, u_texel.y));
+  float nDR = idAt(sampleUv + vec2(u_texel.x, -u_texel.y));
+
+  float lit = 0.0;
+  lit += (nU <= 0.001) ? 0.05 : -0.015;
+  lit += (nUL <= 0.001) ? 0.03 : 0.0;
+  lit += (nL <= 0.001) ? 0.02 : 0.0;
+  lit -= (nD > 0.001) ? 0.05 : 0.0;
+  lit -= (nDR > 0.001) ? 0.03 : 0.0;
+  lit -= (nR > 0.001) ? 0.02 : 0.0;
+
+  float ambient = 0.94 + sampleUv.y * 0.06;
+  vec3 rgb = albedo * (ambient + lit);
+
+  if (h2 > 0.988) {
+    rgb += vec3(0.12, 0.12, 0.12) * (h2 - 0.988) * 8.0;
+  }
+  return clamp(rgb, 0.0, 1.0);
+}
+
 void main() {
-  // 上传约定：cell y=0 → 纹理高 v；屏底 v_uv.y=0 → 低 v → 世界底部
-  // 不翻转，使重力下落方向与画面下方一致
-  float id = texture(u_tex, v_uv).r;
+  float id = idAt(v_uv);
   if (id <= 0.001) {
     outColor = vec4(u_bg, 1.0);
     return;
   }
-  // 色号 1..N → 调色板纹素中心
-  float idx = (id * 255.0 + 0.5) / 256.0;
-  vec3 rgb = texture(u_palette, vec2(idx, 0.5)).rgb;
-  outColor = vec4(rgb, 1.0);
+
+  outColor = vec4(shadeId(id, v_uv), 1.0);
 }`;
 
 interface Program {
@@ -168,7 +188,6 @@ export class GpuSandEngine {
   private paletteTex!: WebGLTexture;
   private readFbo!: WebGLFramebuffer;
 
-  private fallProg!: Program;
   private slideProg!: Program;
   private blitProg!: Program;
   private vao!: WebGLVertexArrayObject;
@@ -228,10 +247,6 @@ export class GpuSandEngine {
 
   private initGpu(): void {
     const gl = this.gl;
-    this.fallProg = this.createProgram(SIM_VS, FALL_FS, [
-      'u_tex',
-      'u_texel',
-    ]);
     this.slideProg = this.createProgram(SIM_VS, SLIDE_FS, [
       'u_tex',
       'u_texel',
@@ -241,6 +256,7 @@ export class GpuSandEngine {
     this.blitProg = this.createProgram(SIM_VS, BLIT_FS, [
       'u_tex',
       'u_palette',
+      'u_texel',
       'u_bg',
     ]);
 
@@ -390,14 +406,13 @@ export class GpuSandEngine {
     this.frontIsA = !this.frontIsA;
   }
 
-  /** 将 CPU 网格上传到 GPU（cell y=0 → 纹理顶部 → 高 v） */
+  /** 将 CPU 网格上传到 GPU；G = 列下沉格数（字节） */
   uploadFromWorld(): void {
     if (this.lost) return;
     const { width, height, cells } = this.world;
     const buf = this.uploadBuffer;
     for (let y = 0; y < height; y++) {
       const srcRow = y * width;
-      // GL 纹理行 0 在底部：写入 height-1-y
       const dstRow = (height - 1 - y) * width * 4;
       for (let x = 0; x < width; x++) {
         const id = cells[srcRow + x]!;
@@ -425,7 +440,7 @@ export class GpuSandEngine {
     this.world.clearGpuDirty();
   }
 
-  /** GPU → CPU 同步（吸取 / 通关用） */
+  /** GPU → CPU 同步（吸取 / 通关用）；仅同步色 ID */
   readbackToWorld(): void {
     if (this.lost) return;
     const gl = this.gl;
@@ -459,13 +474,18 @@ export class GpuSandEngine {
     }
   }
 
-  /** 一次完整物理子步：竖直 + 左右对角 */
-  stepOnce(): void {
+  /**
+   * 一轮休止角雪崩：多次对角滑（无竖直 fall，避免空洞上冒）。
+   * 滑后由 CPU densifyAll 密实消缝。
+   */
+  stepAvalancheOnce(): void {
     if (this.lost) return;
-    this.dispatchFall();
-    this.swap();
     const preferLeft = Math.random() < 0.5;
     const dir0 = preferLeft ? -1 : 1;
+    this.dispatchSlide(dir0, this.frameParity);
+    this.swap();
+    this.dispatchSlide(-dir0, this.frameParity);
+    this.swap();
     this.dispatchSlide(dir0, this.frameParity);
     this.swap();
     this.dispatchSlide(-dir0, this.frameParity);
@@ -473,24 +493,13 @@ export class GpuSandEngine {
     this.frameParity ^= 1;
   }
 
-  stepSubsteps(n: number = PHYSICS_SUBSTEPS): void {
-    for (let i = 0; i < n; i++) this.stepOnce();
+  stepAvalanche(n: number): void {
+    for (let i = 0; i < n; i++) this.stepAvalancheOnce();
   }
 
-  private dispatchFall(): void {
-    const gl = this.gl;
-    const p = this.fallProg;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.backFbo());
-    gl.viewport(0, 0, this.width, this.height);
-    gl.useProgram(p.prog);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.frontTex());
-    gl.uniform1i(p.uniforms['u_tex']!, 0);
-    gl.uniform2fv(p.uniforms['u_texel']!, this.texel);
-    gl.bindVertexArray(this.vao);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    gl.bindVertexArray(null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  /** @deprecated 使用 stepAvalanche */
+  stepSubsteps(n: number): void {
+    this.stepAvalanche(n);
   }
 
   private dispatchSlide(dir: number, parity: number): void {
@@ -524,7 +533,8 @@ export class GpuSandEngine {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTex);
     gl.uniform1i(p.uniforms['u_palette']!, 1);
-    gl.uniform3f(p.uniforms['u_bg']!, 0x0d / 255, 0x15 / 255, 0x20 / 255);
+    gl.uniform2fv(p.uniforms['u_texel']!, this.texel);
+    gl.uniform3f(p.uniforms['u_bg']!, 0xf0 / 255, 0xe6 / 255, 0xd4 / 255);
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
@@ -542,7 +552,6 @@ export class GpuSandEngine {
     gl.deleteFramebuffer(this.fboA);
     gl.deleteFramebuffer(this.fboB);
     gl.deleteFramebuffer(this.readFbo);
-    gl.deleteProgram(this.fallProg.prog);
     gl.deleteProgram(this.slideProg.prog);
     gl.deleteProgram(this.blitProg.prog);
     gl.deleteVertexArray(this.vao);

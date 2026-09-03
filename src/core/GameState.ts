@@ -23,7 +23,7 @@ export class GameState {
     this.conveyor = new Conveyor(level.conveyorLimit ?? CONVEYOR_LIMIT);
   }
 
-  /** 点击库存第一行某一列 */
+  /** 点击库存最前一列某一瓶 */
   selectFrontBottle(col: number): boolean {
     if (this.won) return false;
     if (this.conveyor.full) return false;
@@ -40,7 +40,10 @@ export class GameState {
   tick(dt: number): void {
     if (this.won) return;
     this.conveyor.update(dt);
-    absorbSand(this.world, this.conveyor);
+    const { grains } = absorbSand(this.world, this.conveyor);
+    if (grains.length > 0) {
+      this.bus.emit('sand:absorbed', { grains });
+    }
     this.removeFullBottles();
     this.runMergeLoop();
     this.emitHud();

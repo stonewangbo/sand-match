@@ -1,4 +1,8 @@
-import { PHYSICS_SUBSTEPS } from '../config/constants';
+import {
+  AVALANCHE_STEPS_PER_SEC,
+  MAX_AVALANCHE_STEPS_PER_FRAME,
+  REPOSE_MAX_STEP,
+} from '../config/constants';
 import { GpuSandEngine } from '../sand/GpuSandEngine';
 import type { GameState } from './GameState';
 
@@ -7,6 +11,8 @@ export class Game {
   private running = false;
   private lastTs = 0;
   private raf = 0;
+  /** 雪崩步进累积 */
+  private avalancheAcc = 0;
 
   constructor(
     private readonly state: GameState,
@@ -40,14 +46,25 @@ export class Game {
     this.engine.destroy();
   }
 
+  /**
+   * 帧序：absorb+密实 → 自由面休止角雪崩 → upload → 渲染
+   */
   private update(dt: number): void {
     const { world } = this.state;
-    if (world.isGpuDirty) {
-      this.engine.uploadFromWorld();
-    }
-    this.engine.stepSubsteps(PHYSICS_SUBSTEPS);
-    this.engine.readbackToWorld();
+
     this.state.tick(dt);
+
+    this.avalancheAcc += dt * AVALANCHE_STEPS_PER_SEC;
+    const steps = Math.min(
+      MAX_AVALANCHE_STEPS_PER_FRAME,
+      Math.floor(this.avalancheAcc),
+    );
+    this.avalancheAcc -= steps;
+
+    if (steps > 0) {
+      world.surfaceAvalanche(steps, REPOSE_MAX_STEP);
+    }
+
     if (world.isGpuDirty) {
       this.engine.uploadFromWorld();
     }

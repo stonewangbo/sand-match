@@ -2,6 +2,7 @@ import './styles/main.css';
 import { Game } from './core/Game';
 import { GameState } from './core/GameState';
 import { getDefaultLevel } from './level/LevelLoader';
+import { AbsorbFx } from './ui/AbsorbFx';
 import { ConveyorView } from './ui/ConveyorView';
 import { Hud, showWinOverlay } from './ui/Hud';
 import { InventoryView } from './ui/InventoryView';
@@ -10,15 +11,26 @@ function mount(): void {
   const canvas = document.querySelector<HTMLCanvasElement>('#sand-canvas');
   const inventoryEl = document.querySelector<HTMLElement>('#inventory');
   const conveyorEl = document.querySelector<HTMLElement>('#conveyor');
+  const conveyorZone = document.querySelector<HTMLElement>('#conveyor-zone');
   const hudEl = document.querySelector<HTMLElement>('#hud');
   const overlay = document.querySelector<HTMLElement>('#overlay');
+  const fxLayer = document.querySelector<HTMLElement>('#fx-layer');
 
-  if (!canvas || !inventoryEl || !conveyorEl || !hudEl || !overlay) {
+  if (
+    !canvas ||
+    !inventoryEl ||
+    !conveyorEl ||
+    !conveyorZone ||
+    !hudEl ||
+    !overlay ||
+    !fxLayer
+  ) {
     throw new Error('缺少必要 DOM 节点');
   }
 
   let game: Game | null = null;
   let conveyorView: ConveyorView | null = null;
+  let absorbFx: AbsorbFx | null = null;
 
   const showFatal = (message: string): void => {
     overlay.classList.remove('hidden');
@@ -34,12 +46,14 @@ function mount(): void {
     try {
       game?.stop();
       conveyorView?.destroy();
+      absorbFx?.destroy();
 
       const state = new GameState(getDefaultLevel());
       game = new Game(state, canvas);
       new Hud(hudEl, state);
       new InventoryView(inventoryEl, state);
-      conveyorView = new ConveyorView(conveyorEl, state);
+      conveyorView = new ConveyorView(conveyorEl, state, conveyorZone);
+      absorbFx = new AbsorbFx(fxLayer, canvas, state);
 
       state.bus.on('game:won', () => {
         showWinOverlay(overlay, start);

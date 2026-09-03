@@ -14,17 +14,21 @@
       </header>
 
       <main class="game-layout">
-        <section class="glass-zone" aria-label="玻璃瓶">
-          <div class="glass-frame">
-            <canvas id="sand-canvas" width="360" height="420"></canvas>
-          </div>
-        </section>
+        <div class="play-stack">
+          <section class="glass-zone" aria-label="沙画罐">
+            <div class="glass-frame">
+              <canvas id="sand-canvas" width="384" height="480"></canvas>
+            </div>
+          </section>
 
-        <section class="conveyor-zone" aria-label="传送带">
-          <div id="conveyor" class="conveyor"></div>
-        </section>
+          <section class="conveyor-zone" id="conveyor-zone" aria-label="传送带">
+            <div id="conveyor" class="conveyor"></div>
+          </section>
 
-        <section class="inventory-zone" aria-label="瓶子库存">
+          <div id="fx-layer" class="fx-layer" aria-hidden="true"></div>
+        </div>
+
+        <section class="inventory-zone" aria-label="沙桶库存">
           <div id="inventory" class="inventory"></div>
         </section>
       </main>

@@ -1,20 +1,43 @@
+import { INVENTORY_VISIBLE_ROWS } from '../config/constants';
 import { createBottle } from './Bottle';
 import type { Bottle, BottleDef, LevelInventoryData } from '../types';
+
+function shuffleInPlace<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = tmp;
+  }
+  return arr;
+}
 
 export class Inventory {
   readonly rows: number;
   readonly cols: number;
-  /** 行优先，null = 空位 */
+  /** UI 可见的最前深度列数 */
+  readonly visibleRows: number;
+  /** 行优先；消耗后列尾可为 null */
   private slots: (Bottle | null)[];
 
   constructor(data: LevelInventoryData) {
     this.rows = data.rows;
     this.cols = data.cols;
+    this.visibleRows = Math.min(
+      data.visibleRows ?? INVENTORY_VISIBLE_ROWS,
+      this.rows,
+    );
     const size = this.rows * this.cols;
-    this.slots = Array.from({ length: size }, (_, i) => {
-      const def = data.bottles[i];
-      return def ? createBottle(def) : null;
-    });
+    if (data.bottles.length !== size) {
+      throw new Error(
+        `库存瓶子数须等于 ${size}（${this.rows}×${this.cols}），实际 ${data.bottles.length}`,
+      );
+    }
+    if (data.bottles.some((b) => b == null)) {
+      throw new Error('库存不允许空位，bottles 须全部为实瓶');
+    }
+    const defs = shuffleInPlace([...data.bottles]) as BottleDef[];
+    this.slots = defs.map((def) => createBottle(def));
   }
 
   getSlot(row: number, col: number): Bottle | null {
@@ -41,13 +64,12 @@ export class Inventory {
       if (b) stack.push(b);
       this.slots[r * this.cols + col] = null;
     }
-    // 第一行在 index 0：瓶子沉到顶部（row 0）
     for (let i = 0; i < stack.length; i++) {
       this.slots[i * this.cols + col] = stack[i]!;
     }
   }
 
-  /** 供 UI 渲染的快照 */
+  /** 供 UI 渲染的快照（全部深度列） */
   snapshot(): (Bottle | null)[] {
     return this.slots.slice();
   }
